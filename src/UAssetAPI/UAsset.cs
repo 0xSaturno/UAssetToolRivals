@@ -3122,6 +3122,17 @@ namespace UAssetAPI
 
             foreach (Export ex in res.Exports) ex.Asset = res;
 
+            // NamesReferencedFromExportDataCount is deserialized after NameMap, so it
+            // overwrites the extension AddNameReference performs when a name is appended,
+            // leaving the boundary at whatever value the JSON was written with. Names past
+            // that boundary are dropped when converting to zen, so a name introduced by
+            // editing the JSON is silently discarded while export data still addresses it,
+            // and the package fails to load with a bad name index. A map that has been
+            // through JSON cannot be shown to still match the boundary it was written with,
+            // so cover all of it - the cost is only a few unread trailing zen name entries.
+            if (res.NamesReferencedFromExportDataCount < res.GetNameMapIndexList().Count)
+                res.NamesReferencedFromExportDataCount = res.GetNameMapIndexList().Count;
+
             res.ResolveAncestries();
             return res;
         }
@@ -3182,6 +3193,17 @@ namespace UAssetAPI
             toBeFilled.Clear();
 
             foreach (Export ex in res.Exports) ex.Asset = res;
+
+            // NamesReferencedFromExportDataCount is deserialized after NameMap, so it
+            // overwrites the extension AddNameReference performs when a name is appended,
+            // leaving the boundary at whatever value the JSON was written with. Names past
+            // that boundary are dropped when converting to zen, so a name introduced by
+            // editing the JSON is silently discarded while export data still addresses it,
+            // and the package fails to load with a bad name index. A map that has been
+            // through JSON cannot be shown to still match the boundary it was written with,
+            // so cover all of it - the cost is only a few unread trailing zen name entries.
+            if (res.NamesReferencedFromExportDataCount < res.GetNameMapIndexList().Count)
+                res.NamesReferencedFromExportDataCount = res.GetNameMapIndexList().Count;
             return res;
         }
 
