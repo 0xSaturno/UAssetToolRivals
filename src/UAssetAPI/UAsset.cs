@@ -931,8 +931,25 @@ namespace UAssetAPI
 
                 FName exportClassTypeName = Exports[i].GetExportClassType();
                 string exportClassType = exportClassTypeName.Value.Value;
+                bool keptRaw = false;
                 switch (exportClassType)
                 {
+                    case "MovieSceneCompiledData":
+                    case "NiagaraComponent":
+                        // These parse cleanly but do not survive a round-trip. Both hold engine
+                        // structs (MovieSceneEvaluationTemplate, FNiagaraUserRedirectionParameterStore)
+                        // that contain object references encoded as "80 07 04 <FPackageIndex>", which
+                        // this library re-encodes in a different form. Writing such an asset back
+                        // silently altered its export data, which is worse than not parsing it:
+                        // an edit to any *other* part of the asset would ship a corrupted export.
+                        //
+                        // Keeping the bytes verbatim is lossless. It does mean these two exports
+                        // cannot be edited through JSON, but that was never actually possible - the
+                        // output was simply wrong.
+                        Exports[i] = Exports[i].ConvertToChildExport<RawExport>();
+                        if (read) ((RawExport)Exports[i]).Data = reader.ReadBytes((int)Exports[i].SerialSize);
+                        keptRaw = true;
+                        break;
                     case "Texture2D":
                     case "LightMapTexture2D":
                     case "ShadowMapTexture2D":
@@ -995,7 +1012,7 @@ namespace UAssetAPI
                         break;
                 }
 
-                if (read) Exports[i].Read(reader, (int)nextStarting);
+                if (read && !keptRaw) Exports[i].Read(reader, (int)nextStarting);
 
                 // if we got a StructExport, let's modify mappings/MapStructTypeOverride if we can
                 if (read && Exports[i] is StructExport fetchedStructExp && Exports[i] is not FunctionExport)
