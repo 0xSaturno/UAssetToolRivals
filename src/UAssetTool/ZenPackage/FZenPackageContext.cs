@@ -686,15 +686,11 @@ public class FZenPackageContext : IDisposable
             return null;
         }
         
-        // Step 2: Get the relative path (without mount point) and change extension
-        // chunkPath = mountPoint + "/" + relativePath (e.g. "../../../Marvel/Content/Marvel/.../T_Foo.uasset")
-        // We need the relativePath part to match against other containers' FileMap
-        string mountPoint = sourceReader.Toc.MountPoint.TrimEnd('/');
-        string relativePath;
-        if (chunkPath.StartsWith(mountPoint + "/"))
-            relativePath = chunkPath.Substring(mountPoint.Length + 1);
-        else
-            relativePath = chunkPath;
+        // Step 2: Change the extension. GetChunkPath returns the directory index key, mount
+        // point included, and that is exactly how every container's FileMap is keyed - so it is
+        // used as-is. This used to strip a mount prefix here, which was only correct because
+        // GetChunkPath applied the mount a second time; both sides are fixed together.
+        string relativePath = chunkPath;
         
         // Change extension: .uasset -> .uptnl or .m.ubulk
         string bulkRelPath;
