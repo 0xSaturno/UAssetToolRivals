@@ -1699,7 +1699,16 @@ public partial class Program
                         imports.AddRange(converter.GetImportedPackageIds());
                     }
 
-                    string relPath = ResolveOutputPath(packageName);
+                    // Prefer the path the package actually occupies in the container. Deriving
+                    // a location from the package name instead cannot place anything outside
+                    // Marvel/Content: it has no way to know that /MarvelGAS/ lives under
+                    // Marvel/Plugins/MarvelGAS/Content, or /Niagara/ under
+                    // Engine/Plugins/FX/Niagara/Content, so those collapsed into the main
+                    // content tree and 67 plugin packages landed on top of real ones.
+                    string? containerPath = context.GetContainerPath(packageId);
+                    string relPath = !string.IsNullOrEmpty(containerPath)
+                        ? containerPath.Replace('/', Path.DirectorySeparatorChar)
+                        : ResolveOutputPath(packageName);
                     string outputAssetPath = Path.Combine(outputDir, relPath);
                     string? outputAssetDir = Path.GetDirectoryName(outputAssetPath);
                     if (!string.IsNullOrEmpty(outputAssetDir))
