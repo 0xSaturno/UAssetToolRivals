@@ -102,6 +102,42 @@ public partial class Program
         }
     }
     
+    /// <summary>
+    /// Report the build over the JSON API. Repak-X loads this as a library rather than running
+    /// the executable, so the CLI's version command is not reachable from there.
+    /// </summary>
+    private static UAssetResponse GetVersionJson()
+    {
+        var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+        string? informational = assembly
+            .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+
+        // The informational version carries the commit as "1.7.0+<sha>" when the build was
+        // stamped with one. Split it so callers do not have to.
+        string version = informational ?? assembly.GetName().Version?.ToString() ?? "unknown";
+        string? commit = null;
+        int plus = version.IndexOf('+');
+        if (plus >= 0)
+        {
+            commit = version[(plus + 1)..];
+            version = version[..plus];
+        }
+
+        return new UAssetResponse
+        {
+            Success = true,
+            Message = $"UAssetTool v{version}",
+            Data = new Dictionary<string, object?>
+            {
+                ["name"] = "UAssetTool",
+                ["version"] = version,
+                ["commit"] = commit,
+                ["informational_version"] = informational,
+                ["assembly_version"] = assembly.GetName().Version?.ToString()
+            }
+        };
+    }
+
     private static int CliVersion()
     {
         var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
@@ -2753,6 +2789,7 @@ public partial class Program
                 // IoStore operations
                 "list_iostore_files" => ListIoStoreFiles(request.FilePath, request.AesKey, request.IncludeTypes, request.ScriptObjectsPath, request.GamePaks, request.TypeFilter),
                 "create_iostore" => CreateIoStoreJson(request.OutputPath, request.InputDir, request.Compress, request.AesKey),
+                "version" => GetVersionJson(),
                 "is_iostore_compressed" => IsIoStoreCompressed(request.FilePath),
                 "is_iostore_encrypted" => IsIoStoreEncrypted(request.FilePath),
                 "recompress_iostore" => RecompressIoStore(request.FilePath),
