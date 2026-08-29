@@ -6496,11 +6496,9 @@ public partial class Program
 
     private static string ResolveGamePathToContent(string path)
     {
-        // Strip leading ../../../ (mount point prefix)
-        string p = path;
-        while (p.StartsWith("../"))
-            p = p.Substring(3);
-        
+        // Handles a mount prefix that the directory index repeated, not just a leading one.
+        string p = VfsPath.StripMountPrefix(path);
+
         // Convert /Game/X → Marvel/Content/X
         if (p.StartsWith("/Game/"))
             p = "Marvel/Content" + p.Substring(5);

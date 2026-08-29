@@ -329,12 +329,8 @@ public class FZenPackageContext : IDisposable
         else if (path.EndsWith(".ubulk", StringComparison.OrdinalIgnoreCase))
             path = path[..^6];
         
-        // Normalize path separators
-        path = path.Replace('\\', '/');
-        
-        // Remove mount point prefix (e.g., "../../../")
-        while (path.StartsWith("../"))
-            path = path[3..];
+        // Remove mount point prefix (e.g., "../../../"), including a repeated one
+        path = VfsPath.StripMountPrefix(path);
         
         // Map the cooked location back onto the mount it came from. Rewriting every
         // "/Content/" to /Game/ collapsed three different mounts into one: an engine asset
@@ -493,13 +489,11 @@ public class FZenPackageContext : IDisposable
     }
 
     /// <summary>
-    /// Drop the leading ../ segments a container mount point starts with.
+    /// Drop the ../ segments a container mount point starts with.
     /// </summary>
     private static string StripMountPrefix(string path)
     {
-        string p = path;
-        while (p.StartsWith("../")) p = p[3..];
-        return p.TrimStart('/');
+        return VfsPath.StripMountPrefix(path);
     }
 
     /// <summary>
