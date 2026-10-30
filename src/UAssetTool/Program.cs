@@ -52,6 +52,7 @@ public partial class Program
                 "detect" => CliDetect(args),
                 "fix" => CliFix(args),
                 "rebase_mi" => CliRebaseMi(args),
+                "bake_mi_shaders" => CliBakeMiShaders(args),
                 "batch_detect" => CliBatchDetect(args),
                 "dump" => CliDump(args),
                 "to_zen" => CliToZen(args),
@@ -168,6 +169,10 @@ public partial class Program
         Console.WriteLine("    rebase_mi <copy> <parent_pkg> <output>  - Copied game MI -> child of the game MI (survives shader-library rebuilds)");
         Console.WriteLine("      Options: --usmap <path>               - Mappings of the build the copy came from");
         Console.WriteLine("               --parent <uasset> [--parent-usmap <path>] - Report static settings the child gives up");
+        Console.WriteLine("    bake_mi_shaders <mat> <paks> <output>   - Embed an MI's shader code taken from the game's shader library, written with property tags (survives library rebuilds and layout changes, keeps static switches)");
+        Console.WriteLine("      Options: --usmap <path> (required)    - Mappings of the build the material came from");
+        Console.WriteLine("               --aes <hex>                  - AES key of the game containers");
+        Console.WriteLine("               --container <utoc>           - Extra container holding shader libraries (repeatable)");
         Console.WriteLine("    to_json <path> [usmap] [output_dir]     - Convert uasset to JSON (file or directory)");
         Console.WriteLine("      Options: --compact                    - CUE4Parse-style compact output (read-only)");
         Console.WriteLine("    from_json <path> <output> [usmap]       - Convert JSON back to uasset (file or directory)");
@@ -1954,6 +1959,35 @@ public partial class Program
         var parent = parentPath is null ? null : Load(parentPath, Option("--parent-usmap") ?? Option("--usmap"));
 
         var result = MaterialInstanceRebaser.Rebase(source, args[2], parent);
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(args[3]))!);
+        File.WriteAllBytes(args[3], result.AssetData);
+        File.WriteAllBytes(Path.ChangeExtension(args[3], ".uexp"), result.ExportsData);
+        foreach (var note in result.Notes) Console.WriteLine(note);
+        return 0;
+    }
+
+    private static int CliBakeMiShaders(string[] args)
+    {
+        if (args.Length < 4)
+        {
+            Console.Error.WriteLine("Usage: UAssetTool bake_mi_shaders <material.uasset> <paks_directory> <output.uasset> --usmap <path> [--aes <hex>] [--container <utoc>]...");
+            return 1;
+        }
+
+        string? Option(string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+        var usmap = Option("--usmap") ?? throw new ArgumentException("--usmap is required: the material's properties must be parsed.");
+        var aes = Option("--aes");
+
+        // Mount order: base containers, then patch (_P) containers, so the newest library wins for a hash both have.
+        var containers = Directory.GetFiles(args[2], "*.utoc", SearchOption.TopDirectoryOnly)
+            .OrderBy(p => Path.GetFileNameWithoutExtension(p).EndsWith("_P", StringComparison.OrdinalIgnoreCase))
+            .ThenBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        for (var i = 0; i < args.Length - 1; i++) if (args[i] == "--container") containers.Add(args[i + 1]);
+
+        using var libraries = ShaderLibrarySet.Open(containers, aes is null ? null : Convert.FromHexString(aes.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? aes[2..] : aes));
+        var source = new UAsset(args[1], EngineVersion.VER_UE5_3, new Usmap(usmap), CustomSerializationFlags.NoDummies);
+        var result = ShaderMapBaker.Bake(source, libraries);
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(args[3]))!);
         File.WriteAllBytes(args[3], result.AssetData);
         File.WriteAllBytes(Path.ChangeExtension(args[3], ".uexp"), result.ExportsData);
