@@ -51,6 +51,7 @@ public partial class Program
             {
                 "detect" => CliDetect(args),
                 "fix" => CliFix(args),
+                "rebase_mi" => CliRebaseMi(args),
                 "batch_detect" => CliBatchDetect(args),
                 "dump" => CliDump(args),
                 "to_zen" => CliToZen(args),
@@ -164,6 +165,9 @@ public partial class Program
         Console.WriteLine();
         Console.WriteLine("  Asset Editing:");
         Console.WriteLine("    fix <uasset_path> [usmap_path]          - Fix SerializeSize for meshes");
+        Console.WriteLine("    rebase_mi <copy> <parent_pkg> <output>  - Copied game MI -> child of the game MI (survives shader-library rebuilds)");
+        Console.WriteLine("      Options: --usmap <path>               - Mappings of the build the copy came from");
+        Console.WriteLine("               --parent <uasset> [--parent-usmap <path>] - Report static settings the child gives up");
         Console.WriteLine("    to_json <path> [usmap] [output_dir]     - Convert uasset to JSON (file or directory)");
         Console.WriteLine("      Options: --compact                    - CUE4Parse-style compact output (read-only)");
         Console.WriteLine("    from_json <path> <output> [usmap]       - Convert JSON back to uasset (file or directory)");
@@ -1933,6 +1937,30 @@ public partial class Program
         return 0;
     }
     
+    private static int CliRebaseMi(string[] args)
+    {
+        if (args.Length < 4)
+        {
+            Console.Error.WriteLine("Usage: UAssetTool rebase_mi <copy.uasset> <parent_package> <output.uasset> [--usmap <path>] [--parent <parent.uasset>] [--parent-usmap <path>]");
+            return 1;
+        }
+
+        string? Option(string name) => Array.IndexOf(args, name) is var i and >= 0 && i + 1 < args.Length ? args[i + 1] : null;
+        UAsset Load(string path, string? usmap) =>
+            new(path, EngineVersion.VER_UE5_3, usmap is null ? null : new Usmap(usmap), CustomSerializationFlags.NoDummies);
+
+        var source = Load(args[1], Option("--usmap"));
+        var parentPath = Option("--parent");
+        var parent = parentPath is null ? null : Load(parentPath, Option("--parent-usmap") ?? Option("--usmap"));
+
+        var result = MaterialInstanceRebaser.Rebase(source, args[2], parent);
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(args[3]))!);
+        File.WriteAllBytes(args[3], result.AssetData);
+        File.WriteAllBytes(Path.ChangeExtension(args[3], ".uexp"), result.ExportsData);
+        foreach (var note in result.Notes) Console.WriteLine(note);
+        return 0;
+    }
+
     private static int CliBatchDetect(string[] args) => CliDetect(args);
     
     private static int CliDump(string[] args)
